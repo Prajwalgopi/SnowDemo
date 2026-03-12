@@ -1,0 +1,76 @@
+name: Deploy Snowflake Objects
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install Snowflake CLI
+        run: pip install snowflake-cli-labs
+
+      - name: Create Snowflake connection profile
+        run: |
+          mkdir -p ~/.snowflake
+
+          cat <<EOF > ~/.snowflake/config.toml
+          [connections.cicd_conn]
+          account = "${{ secrets.SNOWFLAKE_ACCOUNT }}"
+          user = "${{ secrets.SNOWFLAKE_USER }}"
+          password = "${{ secrets.SNOWFLAKE_PASSWORD }}"
+          role = "CICD_DEPLOY_ROLE"
+          warehouse = "${{ secrets.SNOWFLAKE_WAREHOUSE }}"
+          database = "DBT_DEMO"
+          EOF
+
+          chmod 600 ~/.snowflake/config.toml
+
+      - name: Detect changed SQL files
+        run: |
+          files=$(git diff --name-only HEAD^ HEAD | grep '^snowflake-objects/.*\.sql$' | tr '\n' ' ' || true)
+
+          echo "$files"
+          echo "FILES=$files" >> $GITHUB_ENV
+
+      - name: Deploy Schemas
+        if: env.FILES != ''
+        run: |
+          for file in $FILES
+          do
+            if [[ $file == snowflake-objects/schemas/* ]]; then
+              echo "Deploying schema $file"
+              snow sql -c cicd_conn -f $file
+            fi
+          done
+
+      - name: Deploy Tables
+        if: env.FILES != ''
+        run: |
+          for file in $FILES
+          do
+            if [[ $file == snowflake-objects/tables/* ]]; then
+              echo "Deploying table $file"
+              snow sql -c cicd_conn -f $file
+            fi
+          done
+
+      - name: Deploy Views
+        if: env.FILES != ''
+        run: |
+          for file in $FILES
+          do
+            if [[ $file == snowflake-objects/views/* ]]; then
+              echo "Deploying view $file"
+              snow sql -c cicd_conn -f $file
+            fi
+          done
