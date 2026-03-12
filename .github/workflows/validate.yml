@@ -1,0 +1,45 @@
+name: Validate Snowflake Objects
+
+on:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Fetch base branch
+        run: |
+          git fetch origin ${{ github.base_ref }}
+
+      - name: Detect changed SQL files
+        run: |
+          echo "Detecting changed SQL files..."
+
+          files=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^snowflake-objects/.*\.sql$' | tr '\n' ' ' || true)
+
+          echo "$files"
+          echo "FILES=$files" >> $GITHUB_ENV
+
+      - name: Validate SQL files
+        if: env.FILES != ''
+        run: |
+          for file in $FILES
+          do
+            echo "Validating SQL file: $file"
+
+            if ! grep -q ";" "$file"; then
+              echo "SQL file appears invalid: $file"
+              exit 1
+            fi
+          done
+
+      - name: No SQL files changed
+        if: env.FILES == ''
+        run: echo "No Snowflake SQL files changed."
